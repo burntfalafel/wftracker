@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Warframe Collection Tracker</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2rem; }
+        h2 { margin-top: 2rem; }
+        table { border-collapse: collapse; width: 100%; max-width: 800px; }
+        th, td { padding: 0.4rem 0.8rem; border-bottom: 1px solid #ddd; text-align: left; }
+        th { background: #f2f2f2; }
+        tr:hover { background: #fafafa; }
+        form { display: inline; }
+        .checkbox-cell { text-align: center; }
+    </style>
+</head>
+<body>
+    <h1>Warframe Collection Tracker</h1>
+
+    <form method="post" action="{{ url_for('index') }}">
+        {% for category, items in data.items() %}
+            <h2>{{ category.capitalize() }}</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 60%">Item</th>
+                        <th class="checkbox-cell">Blueprint</th>
+                        <th class="checkbox-cell">Mastered</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                        <tr>
+                            <td>{{ item.name }}</td>
+                            <td class="checkbox-cell">
+                                <input type="checkbox" name="bp|{{ category }}|{{ item.name }}" {% if item.blueprint %}checked{% endif %} />
+                            </td>
+                            <td class="checkbox-cell">
+                                <input type="checkbox" name="ma|{{ category }}|{{ item.name }}" {% if item.mastered %}checked{% endif %} />
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endfor %}
+
+        <div style="margin-top: 2rem;">
+            <button type="submit">Save progress</button>
+        </div>
+    </form>
+
+    <script>
+        // When a “mastered” checkbox is checked we automatically check the
+        // corresponding blueprint checkbox in the same row so that the UI
+        // reflects the logical dependency between the two states.
+        document.querySelectorAll('input[name^="ma|"]').forEach(function(maCb) {
+            maCb.addEventListener('change', function() {
+                if (this.checked) {
+                    // The blueprint checkbox is the previous sibling <td> element's input.
+                    const bpCell = this.parentElement.previousElementSibling;
+                    if (bpCell) {
+                        const bpCb = bpCell.querySelector('input[type="checkbox"]');
+                        if (bpCb) bpCb.checked = true;
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

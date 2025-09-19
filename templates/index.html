@@ -56,6 +56,16 @@
                         <th class="checkbox-cell">Blueprint</th>
                         <th class="checkbox-cell">Mastered</th>
                     </tr>
+                    <!-- Select-all controls for the current category -->
+                    <tr>
+                        <th></th>
+                        <th class="checkbox-cell">
+                            <input type="checkbox" class="select-all-bp" title="Toggle all blueprints in this category" />
+                        </th>
+                        <th class="checkbox-cell">
+                            <input type="checkbox" class="select-all-ma" title="Toggle all mastered in this category" />
+                        </th>
+                    </tr>
                 </thead>
                 <tbody>
                     {% for item in items %}
@@ -161,6 +171,74 @@
                 if (row) row.dataset.mastered = this.checked ? '1' : '0';
             });
         });
+
+        // Select-all per-category ------------------------------------------------
+        (function() {
+            // Helper to update dataset attributes quickly
+            function setRowState(row, {bp, ma}) {
+                if (typeof bp === 'boolean') row.dataset.blueprint = bp ? '1' : '0';
+                if (typeof ma === 'boolean') row.dataset.mastered  = ma ? '1' : '0';
+            }
+
+            document.querySelectorAll('table').forEach(function(table) {
+                const selectAllBp = table.querySelector('input.select-all-bp');
+                const selectAllMa = table.querySelector('input.select-all-ma');
+
+                if (!selectAllBp || !selectAllMa) return;
+
+                const bpCheckboxes = table.querySelectorAll('input[name^="bp|"]');
+                const maCheckboxes = table.querySelectorAll('input[name^="ma|"]');
+
+                // Initialise state of select-all boxes
+                function refreshSelectAll() {
+                    const allBpChecked = Array.from(bpCheckboxes).every(cb => cb.checked);
+                    selectAllBp.indeterminate = !allBpChecked && Array.from(bpCheckboxes).some(cb => cb.checked);
+                    selectAllBp.checked = allBpChecked;
+
+                    const allMaChecked = Array.from(maCheckboxes).every(cb => cb.checked);
+                    selectAllMa.indeterminate = !allMaChecked && Array.from(maCheckboxes).some(cb => cb.checked);
+                    selectAllMa.checked = allMaChecked;
+                }
+
+                refreshSelectAll();
+
+                // Event listeners for select-all blueprint
+                selectAllBp.addEventListener('change', function() {
+                    const shouldCheck = this.checked;
+                    bpCheckboxes.forEach(function(cb) {
+                        // When unchecking, ensure we do not violate mastered dependency
+                        if (!shouldCheck && cb.closest('tr').dataset.mastered === '1') return;
+                        cb.checked = shouldCheck;
+                        setRowState(cb.closest('tr'), {bp: shouldCheck});
+                    });
+                    refreshSelectAll();
+                });
+
+                // Event listener for select-all mastered
+                selectAllMa.addEventListener('change', function() {
+                    const shouldCheck = this.checked;
+                    maCheckboxes.forEach(function(cb) {
+                        cb.checked = shouldCheck;
+                        const row = cb.closest('tr');
+                        setRowState(row, {ma: shouldCheck});
+                        if (shouldCheck) {
+                            // Ensure blueprint checked too
+                            const bpCb = row.querySelector('input[name^="bp|"]');
+                            if (bpCb) {
+                                bpCb.checked = true;
+                                setRowState(row, {bp: true});
+                            }
+                        }
+                    });
+                    // When all mastered toggled off, we don't touch blueprint state
+                    refreshSelectAll();
+                });
+
+                // Keep select-all boxes up-to-date when individual boxes change
+                bpCheckboxes.forEach(cb => cb.addEventListener('change', refreshSelectAll));
+                maCheckboxes.forEach(cb => cb.addEventListener('change', refreshSelectAll));
+            });
+        })();
 
         // Keep dataset attribute of blueprint cells in sync when user toggles them
         document.querySelectorAll('input[name^="bp|"]').forEach(function(bpCb) {

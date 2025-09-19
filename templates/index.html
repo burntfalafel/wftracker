@@ -170,29 +170,9 @@
             });
         });
 
-        // Toggle visibility based on blueprint/mastered state ---------------
-        function applyFilters() {
-            const hideMastered = document.getElementById('hide-mastered').checked;
-            const hideBlueprint = document.getElementById('hide-blueprint').checked;
-
-            document.querySelectorAll('tr[data-blueprint]')
-                .forEach(function (row) {
-                    const hasBp = row.dataset.blueprint === '1';
-                    const hasMa = row.dataset.mastered === '1';
-
-                    let hide = false;
-                    if (hideMastered && hasMa) hide = true;
-                    if (hideBlueprint && hasBp) hide = true;
-
-                    row.style.display = hide ? 'none' : '';
-                });
-        }
-
-        document.getElementById('hide-mastered').addEventListener('change', applyFilters);
-        document.getElementById('hide-blueprint').addEventListener('change', applyFilters);
-
-        // Run once on load so that filters apply if checkboxes are pre-checked
-        applyFilters();
+        /* ------------------------------------------------------------------
+           Filtering helpers
+           ------------------------------------------------------------------ */
 
         // Quick search ---------------------------------------------------------
         const searchInput = document.getElementById('quick-search');
@@ -217,34 +197,14 @@
             });
         }
 
-        // Re-evaluate name filter also when blueprint/mastered filters run
-        const originalApplyFilters = applyFilters;
-        function combinedFilters() {
-            originalApplyFilters();
-            applySearch();
-        }
-        // Override references
-        window.applyFilters = combinedFilters;
+        // We want both the blueprint/mastered filters *and* the quick-search to
+        // work together.  Instead of redefining functions multiple times we
+        // implement a single helper that (1) decides whether a row is hidden
+        // by the BP / mastered filters and stores that decision on
+        // `dataset.hiddenByFilter` and (2) immediately sets the row
+        // visibility; afterwards the search filter can further narrow the
+        // visible set.
 
-        // monkey-patch event listeners again
-        document.getElementById('hide-mastered').removeEventListener('change', applyFilters);
-        document.getElementById('hide-blueprint').removeEventListener('change', applyFilters);
-        document.getElementById('hide-mastered').addEventListener('change', combinedFilters);
-        document.getElementById('hide-blueprint').addEventListener('change', combinedFilters);
-
-        // Track rows hidden by blueprint/mastered filters so name search doesn't unhide them
-        function markFilterHiddenRows() {
-            const hideMastered = document.getElementById('hide-mastered').checked;
-            const hideBlueprint = document.getElementById('hide-blueprint').checked;
-            document.querySelectorAll('tr[data-name]').forEach(function(row) {
-                const hasBp = row.dataset.blueprint === '1';
-                const hasMa = row.dataset.mastered === '1';
-                const hidden = (hideMastered && hasMa) || (hideBlueprint && hasBp);
-                row.dataset.hiddenByFilter = hidden ? '1' : '0';
-            });
-        }
-
-        // Re-implement original applyFilters to also set hiddenByFilter flag
         function applyFilters() {
             const hideMastered = document.getElementById('hide-mastered').checked;
             const hideBlueprint = document.getElementById('hide-blueprint').checked;
@@ -254,27 +214,36 @@
                     const hasBp = row.dataset.blueprint === '1';
                     const hasMa = row.dataset.mastered === '1';
 
-                    let hide = false;
-                    if (hideMastered && hasMa) hide = true;
-                    if (hideBlueprint && hasBp) hide = true;
+                    const hidden = (hideMastered && hasMa) || (hideBlueprint && hasBp);
 
-                    row.dataset.hiddenByFilter = hide ? '1' : '0';
-                    // name search will decide final visibility
+                    row.dataset.hiddenByFilter = hidden ? '1' : '0';
+                    row.style.display = hidden ? 'none' : '';
                 });
         }
 
+        // Combine both filtering mechanisms ----------------------------------
+        function runAllFilters() {
+            applyFilters();
+            applySearch();
+        }
+
+        // Replace previous listeners with the unified handler
+        document.getElementById('hide-mastered').removeEventListener('change', applyFilters);
+        document.getElementById('hide-blueprint').removeEventListener('change', applyFilters);
+        document.getElementById('hide-mastered').addEventListener('change', runAllFilters);
+        document.getElementById('hide-blueprint').addEventListener('change', runAllFilters);
+
         // Attach search events
-        searchInput.addEventListener('input', applySearch);
+        searchInput.addEventListener('input', runAllFilters);
         searchInput.addEventListener('keyup', function(e) {
             if (e.key === 'Escape') {
                 this.value = '';
-                applySearch();
+                runAllFilters();
             }
         });
 
-        // initial
-        applyFilters();
-        applySearch();
+        // Initial run
+        runAllFilters();
     </script>
 </body>
 </html>

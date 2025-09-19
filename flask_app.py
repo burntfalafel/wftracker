@@ -129,16 +129,37 @@ def index():
     cur = db.execute(
         "SELECT category, name, blueprint, mastered FROM items ORDER BY category, name"
     )
-    items_by_category: dict[str, list[dict]] = {}
+
+    items_by_category: dict[str, dict] = {}
+
     for row in cur.fetchall():
         category = row["category"]
-        items_by_category.setdefault(category, []).append(
+        cat_entry = items_by_category.setdefault(
+            category,
+            {
+                "items": [],
+                "total": 0,
+                "mastered_count": 0,
+                "blueprint_count": 0,
+            },
+        )
+
+        mastered_bool = bool(row["mastered"])
+        blueprint_bool = bool(row["blueprint"])
+
+        cat_entry["items"].append(
             {
                 "name": row["name"],
-                "blueprint": bool(row["blueprint"]),
-                "mastered": bool(row["mastered"]),
+                "blueprint": blueprint_bool,
+                "mastered": mastered_bool,
             }
         )
+
+        cat_entry["total"] += 1
+        if mastered_bool:
+            cat_entry["mastered_count"] += 1
+        if blueprint_bool:
+            cat_entry["blueprint_count"] += 1
 
     return render_template("index.html", data=items_by_category)
 

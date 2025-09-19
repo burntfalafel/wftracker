@@ -18,10 +18,23 @@
 <body>
     <h1>Warframe Collection Tracker</h1>
 
-    <form method="post" action="{{ url_for('index') }}">
-        {% for category, items in data.items() %}
-            <h2>{{ category.capitalize() }}</h2>
-            <table>
+    <div style="margin-bottom: 1rem;">
+        <label style="margin-right: 1rem;">
+            <input type="checkbox" id="hide-mastered" /> Hide mastered
+        </label>
+        <label>
+            <input type="checkbox" id="hide-blueprint" /> Hide collected blueprints
+        </label>
+    </div>
+
+    <form method="post" action="{{ url_for('index') }}" id="main-form">
+        {% for category, info in data.items() %}
+            {% set items = info["items"] %}
+            <h2 style="cursor: pointer;" class="collapsible" data-target="table-{{ loop.index }}">
+                {{ category.capitalize() }} – {{ info.mastered_count }}/{{ info.total }} mastered • {{ info.blueprint_count }}/{{ info.total }} blueprints
+            </h2>
+
+            <table id="table-{{ loop.index }}" style="display: none;">
                 <thead>
                     <tr>
                         <th style="width: 60%">Item</th>
@@ -31,7 +44,7 @@
                 </thead>
                 <tbody>
                     {% for item in items %}
-                        <tr>
+                        <tr data-blueprint="{{ 1 if item.blueprint else 0 }}" data-mastered="{{ 1 if item.mastered else 0 }}">
                             <td>{{ item.name }}</td>
                             <td class="checkbox-cell">
                                 <input type="checkbox" name="bp|{{ category }}|{{ item.name }}" {% if item.blueprint %}checked{% endif %} />
@@ -69,6 +82,20 @@
         // When a “mastered” checkbox is checked we automatically check the
         // corresponding blueprint checkbox in the same row so that the UI
         // reflects the logical dependency between the two states.
+        // Collapsible sections ------------------------------------------------
+        document.querySelectorAll('h2.collapsible').forEach(function(header) {
+            const targetId = header.dataset.target;
+            const table = document.getElementById(targetId);
+            header.addEventListener('click', function() {
+                if (table.style.display === 'none') {
+                    table.style.display = '';
+                } else {
+                    table.style.display = 'none';
+                }
+            });
+        });
+
+        // Auto-check blueprint when mastered -----------------------------------
         document.querySelectorAll('input[name^="ma|"]').forEach(function(maCb) {
             maCb.addEventListener('change', function() {
                 if (this.checked) {
@@ -77,10 +104,48 @@
                     if (bpCell) {
                         const bpCb = bpCell.querySelector('input[type="checkbox"]');
                         if (bpCb) bpCb.checked = true;
+                        // Keep dataset attribute in sync so filters work instantly
+                        const row = this.closest('tr');
+                        if (row) row.dataset.blueprint = '1';
                     }
                 }
+                // Update dataset attribute for mastered state so filters reflect change
+                const row = this.closest('tr');
+                if (row) row.dataset.mastered = this.checked ? '1' : '0';
             });
         });
+
+        // Keep dataset attribute of blueprint cells in sync when user toggles them
+        document.querySelectorAll('input[name^="bp|"]').forEach(function(bpCb) {
+            bpCb.addEventListener('change', function() {
+                const row = this.closest('tr');
+                if (row) row.dataset.blueprint = this.checked ? '1' : '0';
+            });
+        });
+
+        // Toggle visibility based on blueprint/mastered state ---------------
+        function applyFilters() {
+            const hideMastered = document.getElementById('hide-mastered').checked;
+            const hideBlueprint = document.getElementById('hide-blueprint').checked;
+
+            document.querySelectorAll('tr[data-blueprint]')
+                .forEach(function (row) {
+                    const hasBp = row.dataset.blueprint === '1';
+                    const hasMa = row.dataset.mastered === '1';
+
+                    let hide = false;
+                    if (hideMastered && hasMa) hide = true;
+                    if (hideBlueprint && hasBp) hide = true;
+
+                    row.style.display = hide ? 'none' : '';
+                });
+        }
+
+        document.getElementById('hide-mastered').addEventListener('change', applyFilters);
+        document.getElementById('hide-blueprint').addEventListener('change', applyFilters);
+
+        // Run once on load so that filters apply if checkboxes are pre-checked
+        applyFilters();
     </script>
 </body>
 </html>

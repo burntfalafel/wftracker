@@ -16,15 +16,30 @@
     </style>
 </head>
 <body>
-    <h1>Warframe Collection Tracker</h1>
+    <div style="display:flex; justify-content: space-between; align-items: flex-start; gap:2rem;">
+        <div style="flex:1; min-width:0;">
+            <h1>Warframe Collection Tracker</h1>
 
-    <div style="margin-bottom: 1rem;">
+            <!-- Filters & main form wrapped below -->
+        </div>
+
+        <aside style="width:220px; flex:none;">
+            <h3>Quick finder</h3>
+            <input type="text" id="quick-search" placeholder="Type to filter…" style="width:100%; padding:0.4rem;" />
+            <p style="font-size: 0.85rem; color:#666;">Matches across all categories. Clears on ESC.</p>
+        </aside>
+    </div>
+
+    <div style="margin-bottom: 1rem; display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
         <label style="margin-right: 1rem;">
             <input type="checkbox" id="hide-mastered" /> Hide mastered
         </label>
         <label>
             <input type="checkbox" id="hide-blueprint" /> Hide collected blueprints
         </label>
+
+        <button type="button" id="expand-all">Expand all</button>
+        <button type="button" id="collapse-all">Collapse all</button>
     </div>
 
     <form method="post" action="{{ url_for('index') }}" id="main-form">
@@ -44,8 +59,8 @@
                 </thead>
                 <tbody>
                     {% for item in items %}
-                        <tr data-blueprint="{{ 1 if item.blueprint else 0 }}" data-mastered="{{ 1 if item.mastered else 0 }}">
-                            <td>{{ item.name }}</td>
+                        <tr data-blueprint="{{ 1 if item.blueprint else 0 }}" data-mastered="{{ 1 if item.mastered else 0 }}" data-name="{{ item.name|lower }}">
+                            <td><a href="https://warframe.fandom.com/wiki/{{ item.name }}" target="_blank" rel="noopener">{{ item.name }}</a></td>
                             <td class="checkbox-cell">
                                 <input type="checkbox" name="bp|{{ category }}|{{ item.name }}" {% if item.blueprint %}checked{% endif %} />
                             </td>
@@ -83,17 +98,49 @@
         // corresponding blueprint checkbox in the same row so that the UI
         // reflects the logical dependency between the two states.
         // Collapsible sections ------------------------------------------------
-        document.querySelectorAll('h2.collapsible').forEach(function(header) {
-            const targetId = header.dataset.target;
-            const table = document.getElementById(targetId);
-            header.addEventListener('click', function() {
-                if (table.style.display === 'none') {
-                    table.style.display = '';
-                } else {
+        (function() {
+            const collapsedKey = 'wftracker.collapsed';
+            let collapsedSet;
+            try {
+                collapsedSet = new Set(JSON.parse(localStorage.getItem(collapsedKey) || '[]'));
+            } catch (e) {
+                collapsedSet = new Set();
+            }
+
+            function setCollapsed(id, isCollapsed) {
+                const table = document.getElementById(id);
+                if (!table) return;
+                table.style.display = isCollapsed ? 'none' : '';
+                if (isCollapsed) collapsedSet.add(id); else collapsedSet.delete(id);
+                localStorage.setItem(collapsedKey, JSON.stringify(Array.from(collapsedSet)));
+            }
+
+            // individual header toggle
+            document.querySelectorAll('h2.collapsible').forEach(function(header) {
+                const targetId = header.dataset.target;
+                const table = document.getElementById(targetId);
+                if (collapsedSet.has(targetId)) {
                     table.style.display = 'none';
                 }
+                header.addEventListener('click', function() {
+                    const willCollapse = table.style.display !== 'none';
+                    setCollapsed(targetId, willCollapse);
+                });
             });
-        });
+
+            // Expand / collapse all buttons
+            document.getElementById('expand-all').addEventListener('click', function() {
+                document.querySelectorAll('h2.collapsible').forEach(function(header) {
+                    setCollapsed(header.dataset.target, false);
+                });
+            });
+
+            document.getElementById('collapse-all').addEventListener('click', function() {
+                document.querySelectorAll('h2.collapsible').forEach(function(header) {
+                    setCollapsed(header.dataset.target, true);
+                });
+            });
+        })();
 
         // Auto-check blueprint when mastered -----------------------------------
         document.querySelectorAll('input[name^="ma|"]').forEach(function(maCb) {
@@ -146,6 +193,88 @@
 
         // Run once on load so that filters apply if checkboxes are pre-checked
         applyFilters();
+
+        // Quick search ---------------------------------------------------------
+        const searchInput = document.getElementById('quick-search');
+
+        function applySearch() {
+            const q = searchInput.value.trim().toLowerCase();
+            const rows = document.querySelectorAll('tr[data-name]');
+
+            rows.forEach(function(row) {
+                const name = row.dataset.name;
+                // applyFilters already handled blueprint/mastered hiding; we deal only with name.
+                const matches = !q || name.includes(q);
+                // Combine with existing display style set by other filters (could be 'none')
+                if (matches) {
+                    // Only show if not hidden by other filter
+                    if (row.dataset.hiddenByFilter !== '1') {
+                        row.style.display = '';
+                    }
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        // Re-evaluate name filter also when blueprint/mastered filters run
+        const originalApplyFilters = applyFilters;
+        function combinedFilters() {
+            originalApplyFilters();
+            applySearch();
+        }
+        // Override references
+        window.applyFilters = combinedFilters;
+
+        // monkey-patch event listeners again
+        document.getElementById('hide-mastered').removeEventListener('change', applyFilters);
+        document.getElementById('hide-blueprint').removeEventListener('change', applyFilters);
+        document.getElementById('hide-mastered').addEventListener('change', combinedFilters);
+        document.getElementById('hide-blueprint').addEventListener('change', combinedFilters);
+
+        // Track rows hidden by blueprint/mastered filters so name search doesn't unhide them
+        function markFilterHiddenRows() {
+            const hideMastered = document.getElementById('hide-mastered').checked;
+            const hideBlueprint = document.getElementById('hide-blueprint').checked;
+            document.querySelectorAll('tr[data-name]').forEach(function(row) {
+                const hasBp = row.dataset.blueprint === '1';
+                const hasMa = row.dataset.mastered === '1';
+                const hidden = (hideMastered && hasMa) || (hideBlueprint && hasBp);
+                row.dataset.hiddenByFilter = hidden ? '1' : '0';
+            });
+        }
+
+        // Re-implement original applyFilters to also set hiddenByFilter flag
+        function applyFilters() {
+            const hideMastered = document.getElementById('hide-mastered').checked;
+            const hideBlueprint = document.getElementById('hide-blueprint').checked;
+
+            document.querySelectorAll('tr[data-blueprint]')
+                .forEach(function (row) {
+                    const hasBp = row.dataset.blueprint === '1';
+                    const hasMa = row.dataset.mastered === '1';
+
+                    let hide = false;
+                    if (hideMastered && hasMa) hide = true;
+                    if (hideBlueprint && hasBp) hide = true;
+
+                    row.dataset.hiddenByFilter = hide ? '1' : '0';
+                    // name search will decide final visibility
+                });
+        }
+
+        // Attach search events
+        searchInput.addEventListener('input', applySearch);
+        searchInput.addEventListener('keyup', function(e) {
+            if (e.key === 'Escape') {
+                this.value = '';
+                applySearch();
+            }
+        });
+
+        // initial
+        applyFilters();
+        applySearch();
     </script>
 </body>
 </html>

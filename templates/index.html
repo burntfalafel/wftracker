@@ -50,6 +50,21 @@
         </div>
     </form>
 
+    <hr style="margin: 3rem 0;" />
+
+    <h2>Bulk import from detected_items.txt</h2>
+    <p>
+        If you have generated a <code>detected_items.txt</code> file with the
+        <code>inventory_ocr.py</code> helper script you can upload it here and
+        all matching items will be marked as both “Blueprint” and “Mastered”.
+    </p>
+
+    <form method="post" action="{{ url_for('index') }}" enctype="multipart/form-data">
+        <input type="hidden" name="_action" value="bulk_import" />
+        <input type="file" name="items_file" accept=".txt" required />
+        <button type="submit">Import &amp; mark items</button>
+    </form>
+
     <script>
         // When a “mastered” checkbox is checked we automatically check the
         // corresponding blueprint checkbox in the same row so that the UI

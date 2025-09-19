@@ -69,6 +69,35 @@ def index():
     db = get_db()
 
     if request.method == "POST":
+        # Distinguish between the *main* save form and the optional bulk-import
+        # form (file upload). We look at the presence of the special hidden
+        # field "_action" which is set only by the import form.
+
+        if request.form.get("_action") == "bulk_import":
+            file_storage = request.files.get("items_file")
+            if file_storage and file_storage.filename:
+                try:
+                    # Read entire file, decode as UTF-8 and split lines
+                    raw_text = file_storage.stream.read().decode("utf-8")
+                    imported_items = {
+                        line.strip() for line in raw_text.splitlines() if line.strip()
+                    }
+
+                    if imported_items:
+                        # Update DB in bulk – set both blueprint *and* mastered
+                        placeholders = ",".join(["?"] * len(imported_items))
+                        # SQLite 'IN' clause cannot be empty so we ensured >0 above
+                        db.execute(
+                            f"UPDATE items SET blueprint = 1, mastered = 1 WHERE name IN ({placeholders})",
+                            tuple(imported_items),
+                        )
+                        db.commit()
+                except UnicodeDecodeError:
+                    # Ignore invalid files silently – could add flash message later.
+                    pass
+
+            return redirect(url_for("index"))
+
         # Fetch all items from DB to know which ones exist
         cur = db.execute("SELECT category, name FROM items")
         all_items = cur.fetchall()
